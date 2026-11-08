@@ -9,3 +9,5 @@ Drag shapes onto the canvas, connect them with the Connect tool, double-click sh
 Diagrams are saved locally in the current browser; use Save file to transfer an editable copy between devices.
 
 Inline text editing: Enter saves, Shift+Enter adds a new line, Escape cancels, and clicking outside saves.
+
+Lucidchart JSON imports: use **Open** and select a Lucidchart JSON export (such as `ScurryUserFlows.json`). Shapes, text, and connections become editable. These data exports do not contain original coordinates or styling, so the importer generates a new layout. Multiple pages are combined on one canvas. Connections without matching shapes are skipped and reported. Use the mouse wheel to pan, Shift+wheel to pan horizontally, Ctrl/Cmd+wheel to zoom, and Fit to show the entire diagram.
