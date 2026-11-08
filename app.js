@@ -15,8 +15,43 @@ function inspector(){const n=nodes.find(n=>n.id===selected);$('inspector').style
 function point(e){const p=$('canvas').createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform($('canvas').getScreenCTM().inverse())}
 function add(type,x=500,y=330){remember();const id=uid();nodes.push({id,type,x,y,w:type==='decision'?170:180,h:type==='decision'?110:70,text:type==='text'?'Your text':types[type],fill:type==='decision'?'#fcf2d9':'#ffffff',stroke:'#8ba593',font:14,sw:2});selected=id;setTool('select');render();persist()}
 function connect(id){if(!pending){pending=id;selected=id;toast('Now click the destination shape')}else if(pending!==id){remember();edges.push({id:uid(),from:pending,to:id});pending=null;setTool('select');persist()}render()}
-$('canvas').onpointerdown=e=>{const group=e.target.closest('[data-id]'),edge=e.target.closest('[data-edge]');if(group){const id=group.dataset.id;if(tool==='connect'||e.target.classList.contains('port')){setTool('connect');connect(id);return}selected=id;remember();const p=point(e),n=nodes.find(n=>n.id===id);drag={id,p,x:n.x,y:n.y,w:n.w,h:n.h,resize:e.target.classList.contains('resize')};$('canvas').setPointerCapture(e.pointerId);render()}else if(edge){selected=edge.dataset.edge;render()}else if(tool==='text'){const p=point(e);add('text',p.x-90,p.y-35)}else{selected=null;pending=null;render()}};
-$('canvas').onpointermove=e=>{if(!drag)return;const p=point(e),n=nodes.find(n=>n.id===drag.id);if(drag.resize){n.w=Math.max(60,drag.w+p.x-drag.p.x);n.h=Math.max(35,drag.h+p.y-drag.p.y)}else{n.x=Math.round((drag.x+p.x-drag.p.x)/5)*5;n.y=Math.round((drag.y+p.y-drag.p.y)/5)*5}render()};$('canvas').onpointerup=()=>{if(drag){drag=null;persist()}};
+let lastPress=null;
+$('canvas').onpointerdown=e=>{
+  if(e.button!==undefined&&e.button!==0)return;
+  // Rendering replaces SVG children, so native dblclick targets are not stable.
+  // Match presses by diagram ID instead of depending on the old DOM element.
+  if(inlineEditor)inlineEditor.finish(true);
+  const group=e.target.closest('[data-id]'),edge=e.target.closest('[data-edge]');
+  const id=group?.dataset.id||edge?.dataset.edge;
+  const handle=e.target.classList.contains('port')||e.target.classList.contains('resize');
+  const now=Date.now();
+  if(id&&tool==='select'&&!handle&&lastPress?.id===id&&now-lastPress.time<500&&Math.hypot(e.clientX-lastPress.x,e.clientY-lastPress.y)<6){
+    lastPress=null;e.preventDefault();editInline(id,!group);return;
+  }
+  lastPress=id&&tool==='select'&&!handle?{id,time:now,x:e.clientX,y:e.clientY}:null;
+  if(group){
+    if(tool==='connect'||e.target.classList.contains('port')){setTool('connect');connect(id);return}
+    selected=id;const p=point(e),n=nodes.find(n=>n.id===id);
+    drag={id,p,x:n.x,y:n.y,w:n.w,h:n.h,resize:e.target.classList.contains('resize'),moved:false};
+    $('canvas').setPointerCapture(e.pointerId);render();
+  }else if(edge){selected=id;render()}
+  else if(tool==='text'){const p=point(e);add('text',p.x-90,p.y-35)}
+  else{selected=null;pending=null;render()}
+};
+$('canvas').onpointermove=e=>{
+  if(!drag)return;
+  const p=point(e),dx=p.x-drag.p.x,dy=p.y-drag.p.y;
+  if(!drag.moved){
+    if(Math.hypot(dx,dy)<3)return;
+    remember();drag.moved=true;lastPress=null;
+  }
+  const n=nodes.find(n=>n.id===drag.id);
+  if(drag.resize){n.w=Math.max(60,drag.w+dx);n.h=Math.max(35,drag.h+dy)}
+  else{n.x=Math.round((drag.x+dx)/5)*5;n.y=Math.round((drag.y+dy)/5)*5}
+  render();
+};
+$('canvas').onpointerup=()=>{if(drag){const moved=drag.moved;drag=null;if(moved)persist()}};
+$('canvas').onpointercancel=()=>{drag=null;lastPress=null};
 let inlineEditor=null;
 function editInline(id,isEdge=false){
   if(inlineEditor)inlineEditor.finish(true);
