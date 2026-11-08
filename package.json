@@ -1,0 +1,8 @@
+{
+  "name": "flow-studio",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 8080",
+    "build": "node scripts/build.mjs"
+  }
+}
