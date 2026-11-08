@@ -4,6 +4,8 @@ A dependency-free browser diagram editor. Open `index.html`, or serve the reposi
 
 Run `npm run build` to copy the app into `dist/` for static hosting. The Sites hosting configuration uses that output directory.
 
-Drag shapes onto the canvas, connect them with the Connect tool, edit labels and appearance in the Design panel, and drag the lower-right handle to resize. Double-click a connection to label it. Supports undo/redo, editable JSON save/open, browser autosave, and PNG, PDF, and SVG export. PDF exports embed a high-resolution raster image.
+Drag shapes onto the canvas, connect them with the Connect tool, double-click shapes or connections to edit text directly on the canvas, and edit appearance in the Design panel, and drag the lower-right handle to resize. Double-click a connection to label it. Supports undo/redo, editable JSON save/open, browser autosave, and PNG, PDF, and SVG export. PDF exports embed a high-resolution raster image.
 
 Diagrams are saved locally in the current browser; use Save file to transfer an editable copy between devices.
+
+Inline text editing: Enter saves, Shift+Enter adds a new line, Escape cancels, and clicking outside saves.
