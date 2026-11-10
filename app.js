@@ -112,15 +112,17 @@ $('save').onclick=()=>{download(new Blob([snapshot()],{type:'application/json'})
 $('open').onclick=()=>$('fileInput').click();
 $('fileInput').onchange=async e=>{
   try{
-    const raw=JSON.parse(await e.target.files[0].text());
-    const lucid=raw.product==='lucidchart',d=lucid?importLucidchart(raw):raw;
+    const file=e.target.files[0];if(!file)return;
+    const vsdx=/\.vsdx$/i.test(file.name),raw=vsdx?null:JSON.parse(await file.text());
+    const lucid=raw?.product==='lucidchart',d=vsdx?await importVsdx(await file.arrayBuffer(),file.name):lucid?importLucidchart(raw):raw;
     if(!Array.isArray(d.nodes)||!Array.isArray(d.edges)||d.nodes.some(n=>!types[n.type]||!['x','y','w','h'].every(k=>Number.isFinite(n[k]))||typeof n.text!=='string'||!/^#[0-9a-f]{6}$/i.test(n.fill)||!/^#[0-9a-f]{6}$/i.test(n.stroke)||!/^[a-z0-9]+$/i.test(n.id)))throw Error('Invalid diagram');
     const ids=new Set(d.nodes.map(n=>n.id));
     if(ids.size!==d.nodes.length||d.edges.some(edge=>!/^[a-z0-9]+$/i.test(edge.id)||!ids.has(edge.from)||!ids.has(edge.to)||(edge.label!==undefined&&typeof edge.label!=='string')))throw Error('Invalid connections');
     remember();restore(JSON.stringify(d));fitDiagram();
     if(lucid){alert(`Imported ${d.nodes.length} editable shapes and ${d.edges.length} connections.\n\nThis Lucidchart JSON export does not include layout or appearance. Flow Studio generated a new layout with default styling.${raw.pages.length>1?' All pages were combined on one canvas.':''}${d.warnings.length?'\n\n'+d.warnings.join('\n'):''}`)}
+    else if(vsdx){alert(`Imported ${d.nodes.length} editable shapes and ${d.edges.length} connections.\n\nBox positions and sizes were preserved. Connections use Flow Studio routing.${d.pageCount>1?' Pages were placed side by side.':''}${d.warnings.length?'\n\n'+d.warnings.join('\n'):''}`)}
     else toast('Diagram opened');
-  }catch{toast('Please choose a valid Flow Studio or Lucidchart JSON file')}
+  }catch(error){toast(/\.vsdx$/i.test(e.target.files[0]?.name||'')?'VSDX import failed: '+error.message:'Please choose a valid Flow Studio or Lucidchart JSON file')}
   e.target.value='';
 };
 function fitDiagram(){const b=bounds();viewX=b.x+b.w/2;viewY=b.y+b.h/2;changeZoom(Math.min(1,1200/b.w,850/b.h)*.9)}

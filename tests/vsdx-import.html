@@ -1,0 +1,55 @@
+<!doctype html><meta charset="utf-8"><title>VSDX import tests</title>
+<pre id="results">Running…</pre><script src="../vsdx-import.js"></script>
+<script>
+(async()=>{
+  const checks=[],assert=(ok,message)=>{if(!ok)throw Error(message);checks.push(message)};
+  try{
+    const buffer=await (await fetch('../ScurryUserFlows.vsdx')).arrayBuffer();
+    const d=await importVsdx(buffer,'ScurryUserFlows.vsdx');
+    const expected=await (await fetch('../ScurryUserFlows.positioned.json')).json();
+    assert(d.nodes.length===89&&d.edges.length===97,'Scurry: 89 boxes and 97 connections');
+    assert(d.warnings.length===0,'Scurry: no skipped content');
+    d.nodes.forEach((n,i)=>{
+      const e=expected.nodes[i];
+      if(n.text!==e.text||['x','y','w','h','font','sw'].some(k=>Math.abs(n[k]-e[k])>1e-8)||n.fill!==e.fill||n.stroke!==e.stroke)throw Error('Geometry or text mismatch: '+i);
+    });checks.push('All box positions, dimensions, labels and colors match independently converted fixture');
+    const labels=new Map(d.nodes.map(n=>[n.id,n.text])),oldLabels=new Map(expected.nodes.map(n=>[n.id,n.text]));
+    assert(JSON.stringify(d.edges.map(e=>[labels.get(e.from),labels.get(e.to),e.label]))===JSON.stringify(expected.edges.map(e=>[oldLabels.get(e.from),oldLabels.get(e.to),e.label])),'All connector directions and labels match');
+    for(const bad of [new ArrayBuffer(0),new Uint8Array(100).buffer,buffer.slice(0,buffer.byteLength-30)]){
+      let rejected=false;try{await importVsdx(bad)}catch{rejected=true}assert(rejected,'Reject malformed or truncated ZIP');
+    }
+    // Exercise stored ZIP entries, multiple pages, directions and warnings.
+    function zip(parts){
+      const encoder=new TextEncoder(),local=[],central=[];let position=0;
+      const u16=(v,o,n)=>v.setUint16(o,n,true),u32=(v,o,n)=>v.setUint32(o,n,true);
+      for(const [name,source] of Object.entries(parts)){
+        const n=encoder.encode(name),data=encoder.encode(source),header=new Uint8Array(30+n.length),h=new DataView(header.buffer);
+        u32(h,0,0x04034b50);u32(h,18,data.length);u32(h,22,data.length);u16(h,26,n.length);header.set(n,30);
+        const record=new Uint8Array(46+n.length),r=new DataView(record.buffer);u32(r,0,0x02014b50);u32(r,20,data.length);u32(r,24,data.length);u16(r,28,n.length);u32(r,42,position);record.set(n,46);
+        local.push(header,data);central.push(record);position+=header.length+data.length;
+      }
+      const end=new Uint8Array(22),v=new DataView(end.buffer);u32(v,0,0x06054b50);u16(v,8,central.length);u16(v,10,central.length);u32(v,12,central.reduce((sum,c)=>sum+c.length,0));u32(v,16,position);
+      return new Blob([...local,...central,end]).arrayBuffer();
+    }
+    const wrap=s=>`<PageContents xmlns="http://schemas.microsoft.com/office/visio/2012/main">${s}</PageContents>`;
+    const shape=(id,x,label)=>`<Shape ID="${id}" NameU="DecisionBlock"><Cell N="Width" V="2"/><Cell N="Height" V="1"/><Cell N="PinX" V="${x}"/><Cell N="PinY" V="3"/><Text>${label}</Text></Shape>`;
+    const parts={
+      'visio/pages/pages.xml':'<Pages xmlns:r="urn:test"><Page><Rel r:id="a"/></Page><Page><Rel r:id="b"/></Page></Pages>',
+      'visio/pages/_rels/pages.xml.rels':'<Relationships><Relationship Id="a" Target="page1.xml"/><Relationship Id="b" Target="page2.xml"/></Relationships>',
+      'visio/pages/page1.xml':wrap(`<Shapes>${shape('1',-2,'A &amp; B')}${shape('2',4,'Target')}<Shape ID="3"><Cell N="BeginX" V="0"/><Cell N="BeginArrow" V="4"/><Cell N="EndArrow" V="0"/><Text>Back</Text></Shape><Shape ID="4"><Cell N="BeginX" V="0"/></Shape></Shapes><Connects><Connect FromSheet="3" FromCell="BeginX" ToSheet="1"/><Connect FromSheet="3" FromCell="EndX" ToSheet="2"/></Connects>`),
+      'visio/pages/page2.xml':wrap(`<Shapes>${shape('1',-10,'Second page')}</Shapes>`)
+    };
+    const multi=await importVsdx(await zip(parts));
+    assert(multi.nodes.length===3&&multi.pageCount===2&&new Set(multi.nodes.map(n=>n.id)).size===3,'Multiple pages namespace IDs');
+    assert(multi.nodes[0].type==='decision'&&multi.nodes[0].text==='A & B','Shape types and XML text decoding');
+    assert(multi.nodes[1].x-multi.nodes[0].x===576&&multi.nodes[2].x>multi.nodes[1].x+multi.nodes[1].w,'Relative positions preserved; pages placed side by side');
+    assert(multi.edges[0].from===multi.nodes[1].id&&multi.edges[0].to===multi.nodes[0].id&&multi.warnings.length===1,'Reversed arrows preserved; unattached lines reported');
+    const frame=document.createElement('iframe');frame.src='../index.html';document.body.append(frame);await new Promise(resolve=>frame.onload=resolve);
+    let message='';frame.contentWindow.alert=s=>message=s;
+    const input=frame.contentDocument.getElementById('fileInput'),transfer=new DataTransfer();transfer.items.add(new File([buffer],'ScurryUserFlows.vsdx'));input.files=transfer.files;await input.onchange({target:input});
+    assert(message.includes('89 editable shapes and 97 connections'),'Open file handler imports VSDX');
+    assert(frame.contentDocument.querySelectorAll('#canvas .node').length===89,'Imported nodes render in the canvas');
+    document.getElementById('results').textContent='PASS\n'+checks.join('\n');
+  }catch(error){document.getElementById('results').textContent='FAIL\n'+error.stack}
+})();
+</script>
